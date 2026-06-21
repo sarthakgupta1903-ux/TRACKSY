@@ -1,0 +1,94 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net - Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helper Functions ---
+    
+    // Check if the user is authenticated
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Check if the caller is the owner of the resource
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Basic ID verification to prevent poisoning
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Validation for User profile creation and updates
+    function isValidUser(data, userId) {
+      return isOwner(userId) &&
+        data.keys().hasAll(['name', 'email', 'createdAt']) &&
+        data.keys().size() == 3 &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+        data.email is string && data.email.size() > 0 && data.email.size() <= 150 &&
+        data.createdAt is string;
+    }
+
+    // Validation for Task creation
+    function isValidTask(data) {
+      return isSignedIn() &&
+        data.userId == request.auth.uid &&
+        data.keys().hasAll(['userId', 'title', 'status', 'createdAt', 'updatedAt']) &&
+        data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+        data.status is string && (data.status == 'pending' || data.status == 'completed') &&
+        data.createdAt is string &&
+        data.updatedAt is string;
+    }
+
+    // Validation for Feedback creation
+    function isValidFeedback(data) {
+      return isSignedIn() &&
+        data.userId == request.auth.uid &&
+        data.keys().hasAll(['userId', 'userEmail', 'message', 'createdAt']) &&
+        data.keys().size() == 4 &&
+        data.userEmail is string && data.userEmail.size() > 0 &&
+        data.message is string && data.message.size() > 0 && data.message.size() <= 2000 &&
+        data.createdAt is string;
+    }
+
+    // --- Collections ---
+
+    // USERS COLLECTION
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow create, update: if isValidUser(request.resource.data, userId);
+      allow delete: if false; // Profiles shouldn't be deleted directly by user
+    }
+
+    // TASKS COLLECTION
+    match /tasks/{taskId} {
+      // Secure read: resource must exist, user must own the task
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      // List query must enforce that only owned tasks are queried
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      
+      // Create: task ID check and strict task payload check
+      allow create: if isValidId(taskId) && isValidTask(request.resource.data);
+
+      // Update: must be owner, request body must be valid shape
+      allow update: if isSignedIn() && 
+        resource.data.userId == request.auth.uid && 
+        isValidTask(request.resource.data);
+
+      // Delete: must be owner
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // FEEDBACK COLLECTION
+    match /feedback/{feedbackId} {
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isValidId(feedbackId) && isValidFeedback(request.resource.data);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+  }
+}

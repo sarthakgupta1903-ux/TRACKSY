@@ -1,0 +1,132 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User account information recorded upon signup.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The custom name of the user"
+        },
+        "email": {
+          "type": "string",
+          "description": "User's email address"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when account was created"
+        }
+      },
+      "required": ["name", "email", "createdAt"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "Task item with attributes, deadlines, priority, and completion state.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "UID of the owner"
+        },
+        "title": {
+          "type": "string",
+          "description": "Task name/title"
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed notes on task"
+        },
+        "category": {
+          "type": "string",
+          "description": "Task category tag, e.g., Work, Personal, Shopping, Health"
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["low", "medium", "high"],
+          "description": "Task importance level"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "completed"],
+          "description": "Completion state of the task"
+        },
+        "startDate": {
+          "type": "string",
+          "description": "Task start timestamp"
+        },
+        "dueDate": {
+          "type": "string",
+          "description": "Task due date"
+        },
+        "reminderTime": {
+          "type": "string",
+          "description": "Time to trigger alert"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "When task was created"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "When task was last updated"
+        },
+        "isRecurring": {
+          "type": "boolean",
+          "description": "Whether this is a recurring task"
+        },
+        "repeatPattern": {
+          "type": "string",
+          "enum": ["none", "daily", "weekly", "monthly", "custom"],
+          "description": "Frequency pattern for recurrence"
+        },
+        "customActiveDays": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Active days for custom day selection (e.g. ['Mon', 'Wed', 'Fri'])"
+        }
+      },
+      "required": ["userId", "title", "status", "createdAt", "updatedAt"]
+    },
+    "Feedback": {
+      "title": "Feedback",
+      "description": "Suggestions and issue reports submitted by authorized users.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "ID of user"
+        },
+        "userEmail": {
+          "type": "string",
+          "description": "User email address"
+        },
+        "message": {
+          "type": "string",
+          "description": "Feedback message text"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "When feedback was submitted"
+        }
+      },
+      "required": ["userId", "userEmail", "message", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Root collection for managing public user profile and record info."
+    },
+    "/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Global tasks collection queried securely using owner checks on userId."
+    },
+    "/feedback/{feedbackId}": {
+      "schema": "Feedback",
+      "description": "Feedback suggestions and issues reported by application users."
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "TRACKSY",
+  "description": "A robust task management application featuring user authentication, task filtering, clean UI, and responsive layout.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
