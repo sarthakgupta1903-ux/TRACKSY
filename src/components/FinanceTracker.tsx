@@ -27,6 +27,7 @@ import {
   AlertCircle, 
   CalendarRange, 
   X, 
+  Coins,
   DollarSign as WalletIcon 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -57,7 +58,68 @@ interface FinancialRecord {
   updatedAt: string;
 }
 
+const getAutoDetectedCurrency = (): string => {
+  try {
+    const saved = localStorage.getItem('tracksy_currency_symbol');
+    if (saved) return saved;
+
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz) {
+      const lowerTz = tz.toLowerCase();
+      if (
+        lowerTz.includes('kolkata') || 
+        lowerTz.includes('calcutta') || 
+        lowerTz.includes('india') || 
+        lowerTz.includes('delhi') || 
+        lowerTz.includes('mumbai')
+      ) {
+        return '₹';
+      }
+      if (
+        lowerTz.includes('europe') || 
+        lowerTz.includes('paris') || 
+        lowerTz.includes('berlin') || 
+        lowerTz.includes('rome') || 
+        lowerTz.includes('madrid') ||
+        lowerTz.includes('brussels') ||
+        lowerTz.includes('amsterdam')
+      ) {
+        return '€';
+      }
+      if (lowerTz.includes('london') || lowerTz.includes('belfast') || lowerTz.includes('edinburgh')) {
+        return '£';
+      }
+      if (lowerTz.includes('tokyo') || lowerTz.includes('osaka') || lowerTz.includes('shanghai') || lowerTz.includes('beijing')) {
+        return '¥';
+      }
+    }
+
+    const lang = navigator.language || '';
+    if (lang.includes('IN') || lang.includes('-in')) {
+      return '₹';
+    }
+    if (lang.includes('GB') || lang.includes('-gb')) {
+      return '£';
+    }
+    if (lang.includes('JP') || lang.includes('-jp') || lang.includes('CN') || lang.includes('-cn')) {
+      return '¥';
+    }
+    return '$';
+  } catch (e) {
+    return '$';
+  }
+};
+
 export default function FinanceTracker() {
+  const [currencySymbol, setCurrencySymbol] = useState<string>(() => {
+    return localStorage.getItem('tracksy_currency_symbol') || getAutoDetectedCurrency();
+  });
+
+  const handleCurrencyChange = (newSymbol: string) => {
+    setCurrencySymbol(newSymbol);
+    localStorage.setItem('tracksy_currency_symbol', newSymbol);
+  };
+
   const [records, setRecords] = useState<FinancialRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -293,6 +355,57 @@ export default function FinanceTracker() {
 
   return (
     <div className="space-y-6 max-h-full" id="finance-tracker-module">
+      
+      {/* Currency Config Bar */}
+      <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 animate-fade-in">
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-2xl">
+            <Coins className="h-5 w-5" />
+          </div>
+          <div>
+            <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight font-display">Currency Preferences</h4>
+            <p className="text-[11px] text-slate-400">
+              System Auto-detected: <span className="font-extrabold text-indigo-600">{getAutoDetectedCurrency()}</span>. Tap to switch or customize.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-start md:justify-end">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {[
+              { symbol: '₹', label: '₹ (Rs)' },
+              { symbol: '$', label: '$ (USD)' },
+              { symbol: '€', label: '€ (EUR)' },
+              { symbol: '¥', label: '¥ (Yuan)' },
+              { symbol: '£', label: '£ (GBP)' },
+              { symbol: 'Rs', label: 'Rs' }
+            ].map((opt) => (
+              <button
+                key={opt.symbol}
+                onClick={() => handleCurrencyChange(opt.symbol)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all border cursor-pointer ${
+                  currencySymbol === opt.symbol
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-150 scale-102 font-extrabold'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                {opt.symbol}
+              </button>
+            ))}
+            <input
+              type="text"
+              placeholder="Custom..."
+              maxLength={4}
+              value={['₹', '$', '€', '¥', '£', 'Rs'].includes(currencySymbol) ? '' : currencySymbol}
+              onChange={(e) => {
+                const val = e.target.value.trim();
+                if (val) handleCurrencyChange(val);
+              }}
+              className="w-20 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-black text-slate-800 text-center placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:bg-white"
+            />
+          </div>
+        </div>
+      </div>
+
       {/* Upper overview cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         
@@ -311,7 +424,7 @@ export default function FinanceTracker() {
           </div>
           <div className="space-y-1">
             <h2 className="text-3xl font-black tracking-tight font-display text-white">
-              ${stats.netBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {currencySymbol}{stats.netBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </h2>
             <p className="text-xs text-indigo-200/80 font-medium">
               Accumulated wealth across all logs
@@ -339,7 +452,7 @@ export default function FinanceTracker() {
           </div>
           <div className="space-y-1">
             <h2 className="text-3xl font-black tracking-tight font-display text-slate-900">
-              ${stats.totalEarning.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {currencySymbol}{stats.totalEarning.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </h2>
             <p className="text-xs text-slate-500 font-medium">
               Consolidated earnings streams
@@ -348,15 +461,15 @@ export default function FinanceTracker() {
           <div className="mt-4 grid grid-cols-3 gap-2 pt-3.5 border-t border-slate-50">
             <div className="space-y-0.5">
               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Daily Wage</span>
-              <p className="text-xs font-black text-slate-800">${stats.dailyEarnings.toFixed(0)}</p>
+              <p className="text-xs font-black text-slate-800">{currencySymbol}{stats.dailyEarnings.toFixed(0)}</p>
             </div>
             <div className="space-y-0.5">
               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Monthly Base</span>
-              <p className="text-xs font-black text-slate-800">${stats.monthlyEarnings.toFixed(0)}</p>
+              <p className="text-xs font-black text-slate-800">{currencySymbol}{stats.monthlyEarnings.toFixed(0)}</p>
             </div>
             <div className="space-y-0.5">
               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Custom/Other</span>
-              <p className="text-xs font-black text-slate-800">${stats.customEarnings.toFixed(0)}</p>
+              <p className="text-xs font-black text-slate-800">{currencySymbol}{stats.customEarnings.toFixed(0)}</p>
             </div>
           </div>
         </div>
@@ -373,7 +486,7 @@ export default function FinanceTracker() {
           </div>
           <div className="space-y-1">
             <h2 className="text-3xl font-black tracking-tight font-display text-slate-900">
-              ${stats.totalExpenditure.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {currencySymbol}{stats.totalExpenditure.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </h2>
             <p className="text-xs text-slate-500 font-medium">
               Sum of daily spending &amp; obligations
@@ -387,7 +500,7 @@ export default function FinanceTracker() {
             <span className={`text-xs font-black px-2 py-0.5 rounded-full ${
               stats.pendingBillsTotal > 0 ? 'bg-amber-50 text-amber-600' : 'bg-slate-50 text-slate-500'
             }`}>
-              ${stats.pendingBillsTotal.toFixed(2)}
+              {currencySymbol}{stats.pendingBillsTotal.toFixed(2)}
             </span>
           </div>
         </div>
@@ -554,7 +667,7 @@ export default function FinanceTracker() {
                           <span className={`text-base font-black ${
                             rec.type === 'earning' ? 'text-emerald-600' : 'text-slate-900'
                           }`}>
-                            {rec.type === 'earning' ? '+' : '-'}${rec.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            {rec.type === 'earning' ? '+' : '-'}{currencySymbol}{rec.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </span>
 
                           {/* Quick Toggle paid/pending status for bills */}
@@ -662,7 +775,7 @@ export default function FinanceTracker() {
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Amount ($)</label>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Amount ({currencySymbol})</label>
                       <input
                         type="number"
                         step="any"
@@ -804,13 +917,13 @@ export default function FinanceTracker() {
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(val: number) => `$${val.toFixed(2)}`} />
+                    <Tooltip formatter={(val: number) => `${currencySymbol}${val.toFixed(2)}`} />
                   </PieChart>
                 </ResponsiveContainer>
                 {/* Center text */}
                 <div className="absolute text-center">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Total Expense</span>
-                  <span className="text-lg font-black text-slate-900 font-display">${stats.totalExpenditure.toFixed(0)}</span>
+                  <span className="text-lg font-black text-slate-900 font-display">{currencySymbol}{stats.totalExpenditure.toFixed(0)}</span>
                 </div>
               </div>
 
@@ -822,7 +935,7 @@ export default function FinanceTracker() {
                       <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
                       <span className="text-slate-500 font-medium">{item.name}</span>
                     </div>
-                    <span className="font-black text-slate-800">${item.value.toFixed(2)}</span>
+                    <span className="font-black text-slate-800">{currencySymbol}{item.value.toFixed(2)}</span>
                   </div>
                 ))}
               </div>
@@ -859,7 +972,7 @@ export default function FinanceTracker() {
                       <p className="text-xs font-black text-slate-800 truncate">{b.label}</p>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[10px] text-slate-400 font-mono">
-                          {matchingBill ? `Amount: $${matchingBill.amount}` : `Est: $${b.defaultAmount}`}
+                          {matchingBill ? `Amount: ${currencySymbol}${matchingBill.amount}` : `Est: ${currencySymbol}${b.defaultAmount}`}
                         </span>
                         <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
                           matchingBill
