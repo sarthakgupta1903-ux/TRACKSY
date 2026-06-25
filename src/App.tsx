@@ -5,7 +5,8 @@
 
 import { useState, useEffect } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth } from './lib/firebase';
+import { doc, getDocFromServer } from 'firebase/firestore';
+import { auth, db } from './lib/firebase';
 import Auth from './components/Auth';
 import Dashboard from './components/Dashboard';
 import { Sparkles } from 'lucide-react';

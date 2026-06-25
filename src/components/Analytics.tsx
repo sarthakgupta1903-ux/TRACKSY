@@ -1,6 +1,7 @@
 import React from 'react';
 import { Task, TaskCategory, TaskPriority } from '../types';
 import { Target, AlertCircle, CheckCircle2, TrendingUp, Presentation, CalendarDays, PieChart } from 'lucide-react';
+import { getLocalDateString } from '../lib/firebase';
 
 interface AnalyticsProps {
   tasks: Task[];
@@ -13,7 +14,7 @@ export default function Analytics({ tasks }: AnalyticsProps) {
   const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   // Overdue calculation (due date in past and status is pending)
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateString();
   const overdue = tasks.filter(t => t.status === 'pending' && t.dueDate && t.dueDate < todayStr).length;
 
   // Priority calculations

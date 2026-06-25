@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { db, auth } from '../lib/firebase';
+import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, addDoc } from 'firebase/firestore';
 import { Send, Sparkles, MessageSquareHeart, CheckCircle, RefreshCw } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -30,12 +30,16 @@ export default function Feedback({ onClose }: FeedbackProps) {
 
     try {
       // Save feedback to Firestore matching Phase 1 model structures
-      await addDoc(collection(db, 'feedback'), {
-        userId: user.uid,
-        userEmail: user.email || 'anonymous',
-        message: message.trim(),
-        createdAt: new Date().toISOString()
-      });
+      try {
+        await addDoc(collection(db, 'feedback'), {
+          userId: user.uid,
+          userEmail: user.email || 'anonymous',
+          message: message.trim(),
+          createdAt: new Date().toISOString()
+        });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.CREATE, 'feedback');
+      }
 
       setSuccess(true);
       setMessage('');

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '../lib/firebase';
+import { db, auth, handleFirestoreError, OperationType, getLocalDateString } from '../lib/firebase';
 import { 
   collection, 
   query, 
@@ -20,6 +20,7 @@ import {
   Trash2, 
   Edit3, 
   TrendingUp, 
+  PiggyBank,
   MessageSquare, 
   Clock, 
   Sparkles, 
@@ -31,12 +32,19 @@ import {
   CheckSquare,
   BarChart2,
   Bookmark,
-  ChevronRight
+  ChevronRight,
+  Activity,
+  ClipboardList,
+  Menu,
+  X
 } from 'lucide-react';
 import { Task, TaskCategory, TaskPriority, TaskStatus } from '../types';
 import TaskForm from './TaskForm';
 import Feedback from './Feedback';
 import Analytics from './Analytics';
+import ProgressMatrix from './ProgressMatrix';
+import RecordsModule from './RecordsModule';
+import FinanceTracker from './FinanceTracker';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface DashboardProps {
@@ -56,8 +64,8 @@ export default function Dashboard({ onSignOut }: DashboardProps) {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   
-  // Tab/Selection scopes: 'all' (Inbox), 'today' (Today's due date), 'important' (High Priority), 'completed', 'analytics'
-  const [activeTab, setActiveTab] = useState<'all' | 'today' | 'important' | 'completed' | 'analytics'>('all');
+  // Tab/Selection scopes: 'all' (Inbox), 'today' (Today's due date), 'important' (High Priority), 'completed', 'progress', 'analytics', 'records', 'finance'
+  const [activeTab, setActiveTab] = useState<'all' | 'today' | 'important' | 'completed' | 'progress' | 'analytics' | 'records' | 'finance'>('all');
 
   // Search & Filtering states
   const [searchQuery, setSearchQuery] = useState('');
@@ -66,6 +74,7 @@ export default function Dashboard({ onSignOut }: DashboardProps) {
 
   // Interactive local notification triggers
   const [notifications, setNotifications] = useState<{ id: string; message: string }[]>([]);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Fetch / Sync tasks from Firestore in real-time
   useEffect(() => {
@@ -155,18 +164,26 @@ export default function Dashboard({ onSignOut }: DashboardProps) {
       if (editingTask && editingTask.id) {
         // Edit Operation
         const taskRef = doc(db, 'tasks', editingTask.id);
-        await updateDoc(taskRef, {
-          ...taskData,
-          updatedAt: new Date().toISOString()
-        });
+        try {
+          await updateDoc(taskRef, {
+            ...taskData,
+            updatedAt: new Date().toISOString()
+          });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.UPDATE, `tasks/${editingTask.id}`);
+        }
       } else {
         // Create Operation
-        await addDoc(collection(db, 'tasks'), {
-          ...taskData,
-          userId: user.uid,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        });
+        try {
+          await addDoc(collection(db, 'tasks'), {
+            ...taskData,
+            userId: user.uid,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.CREATE, 'tasks');
+        }
       }
     } catch (e) {
       console.error("Task manipulation failed: ", e);
@@ -188,10 +205,14 @@ export default function Dashboard({ onSignOut }: DashboardProps) {
       const taskRef = doc(db, 'tasks', task.id);
       const nextStatus: TaskStatus = task.status === 'completed' ? 'pending' : 'completed';
       
-      await updateDoc(taskRef, {
-        status: nextStatus,
-        updatedAt: new Date().toISOString()
-      });
+      try {
+        await updateDoc(taskRef, {
+          status: nextStatus,
+          updatedAt: new Date().toISOString()
+        });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `tasks/${task.id}`);
+      }
     } catch (e) {
       console.error("Error updating status:", e);
     }
@@ -202,7 +223,11 @@ export default function Dashboard({ onSignOut }: DashboardProps) {
     if (!taskId) return;
     try {
       // Execute the delete instantly without blocking native confirm popups which error/fail in cross-origin preview iframes
-      await deleteDoc(doc(db, 'tasks', taskId));
+      try {
+        await deleteDoc(doc(db, 'tasks', taskId));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `tasks/${taskId}`);
+      }
       const notKey = `${taskId}-deleted-${Date.now()}`;
       setNotifications((prev) => [
         ...prev,
@@ -231,7 +256,7 @@ export default function Dashboard({ onSignOut }: DashboardProps) {
   const dailyGoalPercent = totalTasksCount > 0 ? Math.round((completedTasksCount / totalTasksCount) * 100) : 0;
 
   // Up Next calculations
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateString();
   const pendingTasks = tasks.filter(t => t.status === 'pending');
   // Find upNext: prioritize high-priority, or closest due date, or first pending
   const upNextTask = pendingTasks.find(t => t.priority === 'high') || pendingTasks[0] || null;
@@ -291,7 +316,7 @@ export default function Dashboard({ onSignOut }: DashboardProps) {
   });
 
   return (
-    <div className="min-h-screen bg-[#F0F2FA] text-slate-800 flex flex-col md:flex-row overflow-x-hidden font-sans antialiased">
+    <div className="h-screen max-h-screen w-screen overflow-hidden bg-[#F0F2FA] text-slate-800 flex flex-col md:flex-row font-sans antialiased">
       
       {/* Dynamic Toast Alerts Container */}
       <div className="fixed top-4 right-4 z-50 space-y-2 pointer-events-none max-w-sm w-[90%]">
@@ -311,9 +336,198 @@ export default function Dashboard({ onSignOut }: DashboardProps) {
         </AnimatePresence>
       </div>
 
-      {/* Sidebar Navigation */}
-      <nav className="w-full md:w-72 bg-white flex flex-col border-b md:border-b-0 md:border-r border-indigo-100 shadow-xl shadow-slate-100/50 shrink-0">
-        <div className="p-6 md:p-8 flex flex-col h-full justify-between">
+      {/* Mobile sidebar slide-over menu */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <div className="fixed inset-0 z-50 flex md:hidden">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs"
+            />
+            {/* Sidebar Drawer */}
+            <motion.div
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="relative flex flex-col w-4/5 max-w-xs h-full bg-white border-r border-indigo-100 p-5 shadow-2xl overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-8 pb-4 border-b border-indigo-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
+                    <div className="w-4 h-1 border border-white rounded-full bg-white/20"></div>
+                  </div>
+                  <h1 className="text-xl font-black text-indigo-950 tracking-tight font-display">TRACKSY</h1>
+                </div>
+                <button
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="p-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 transition"
+                >
+                  <X className="h-4.5 w-4.5 text-slate-500" />
+                </button>
+              </div>
+
+              <div className="flex-1 flex flex-col justify-between">
+                <div>
+                  {/* Tasks Module */}
+                  <p className="px-4 text-[10px] font-black text-indigo-400/80 tracking-widest uppercase mb-2">
+                    Tasks Module
+                  </p>
+                  <div className="space-y-1 mb-5">
+                    {[
+                      { id: 'all', label: 'Inbox', icon: <Inbox className="h-5 w-5" />, count: pendingTasksCount },
+                      { id: 'today', label: 'Today', icon: <Calendar className="h-5 w-5" />, count: tasks.filter(t => t.dueDate === todayStr && t.status === 'pending').length },
+                      { id: 'important', label: 'Important', icon: <Bookmark className="h-5 w-5" />, count: tasks.filter(t => t.priority === 'high' && t.status === 'pending').length },
+                      { id: 'completed', label: 'Completed', icon: <CheckSquare className="h-5 w-5" />, count: completedTasksCount },
+                      { id: 'analytics', label: 'Analytics Dashboard', icon: <BarChart2 className="h-5 w-5" />, count: null }
+                    ].map((item) => {
+                      const isActive = activeTab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setActiveTab(item.id as any);
+                            setSelectedCategory('All');
+                            setIsMobileMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center gap-4 px-4 py-2.5 rounded-2xl font-bold text-sm transition-all focus:outline-none ${
+                            isActive 
+                              ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-150 scale-102 font-extrabold' 
+                              : 'text-indigo-400/90 hover:bg-indigo-50/60 hover:text-indigo-750'
+                          }`}
+                        >
+                          <span>{item.icon}</span>
+                          <span>{item.label}</span>
+                          {item.count !== null && (
+                            <span className={`ml-auto text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                              isActive ? 'bg-indigo-400 text-white' : 'bg-indigo-50 text-indigo-600'
+                            }`}>
+                              {item.count}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Records Module */}
+                  <p className="px-4 text-[10px] font-black text-indigo-400/80 tracking-widest uppercase mb-2">
+                    Records &amp; Trackers
+                  </p>
+                  <div className="space-y-1 mb-5">
+                    {[
+                      { id: 'progress', label: 'Habits Matrix', icon: <Activity className="h-5 w-5" />, count: tasks.filter(t => t.isRecurring).length },
+                      { id: 'records', label: 'Smart Trackers', icon: <ClipboardList className="h-5 w-5" />, count: null },
+                      { id: 'finance', label: 'Finance Tracker', icon: <PiggyBank className="h-5 w-5" />, count: null }
+                    ].map((item) => {
+                      const isActive = activeTab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setActiveTab(item.id as any);
+                            setSelectedCategory('All');
+                            setIsMobileMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center gap-4 px-4 py-2.5 rounded-2xl font-bold text-sm transition-all focus:outline-none ${
+                            isActive 
+                              ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-150 scale-102 font-extrabold' 
+                              : 'text-indigo-400/90 hover:bg-indigo-50/60 hover:text-indigo-750'
+                          }`}
+                        >
+                          <span>{item.icon}</span>
+                          <span>{item.label}</span>
+                          {item.count !== null && item.count > 0 && (
+                            <span className={`ml-auto text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                              isActive ? 'bg-indigo-400 text-white' : 'bg-indigo-50 text-indigo-600'
+                            }`}>
+                              {item.count}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Categories */}
+                  <p className="px-4 text-[10px] font-black text-indigo-400/80 tracking-widest uppercase mb-2">Categories</p>
+                  <div className="space-y-1 col-span-1">
+                    <div 
+                      onClick={() => {
+                        setSelectedCategory('All');
+                        if (activeTab === 'analytics') setActiveTab('all');
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className={`flex items-center gap-3 px-4 py-2 rounded-xl font-semibold text-xs cursor-pointer transition ${
+                        selectedCategory === 'All' 
+                          ? 'bg-indigo-50 text-indigo-850 font-bold' 
+                          : 'text-slate-600 hover:text-indigo-650 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="w-2.5 h-2.5 rounded-full bg-indigo-600"></div>
+                      <span>All Categories</span>
+                    </div>
+                    {categoriesList.map((cat) => {
+                      const isCatActive = selectedCategory === cat.name;
+                      return (
+                        <div 
+                          key={cat.name}
+                          onClick={() => {
+                            setSelectedCategory(cat.name);
+                            if (activeTab === 'analytics') setActiveTab('all');
+                            setIsMobileMenuOpen(false);
+                          }}
+                          className={`flex items-center gap-3 px-4 py-2 rounded-xl font-semibold text-xs cursor-pointer transition ${
+                            isCatActive 
+                              ? 'bg-indigo-50 text-indigo-850 font-bold' 
+                              : 'text-slate-600 hover:text-indigo-650 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className={`w-2.5 h-2.5 rounded-full ${cat.color}`}></div>
+                          <span>{cat.name}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Bottom Stats & Logout */}
+                <div className="mt-8 pt-4 border-t border-slate-100">
+                  <div className="bg-indigo-50/70 rounded-2xl p-4 border border-indigo-100/40 mb-4">
+                    <div className="flex justify-between items-center mb-1.5">
+                      <span className="text-[10px] font-bold text-indigo-400 tracking-wider">DAILY PROGRESS</span>
+                      <span className="text-[10px] font-black text-indigo-600 font-mono">{dailyGoalPercent}%</span>
+                    </div>
+                    <div className="w-full bg-white h-2 rounded-full overflow-hidden border border-indigo-100/20">
+                      <div 
+                        className="bg-indigo-600 h-full rounded-full transition-all duration-700 ease-out"
+                        style={{ width: `${dailyGoalPercent}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      handleLogout();
+                    }}
+                    className="w-full py-2 px-4 rounded-xl bg-slate-50 hover:bg-rose-50 hover:text-rose-600 text-slate-500 font-bold text-xs text-center border border-slate-100 transition"
+                  >
+                    Disconnect Sync
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Sidebar Navigation (Desktop Only) */}
+      <nav className="hidden md:flex md:w-64 bg-white flex-col border-r border-indigo-100 shadow-xl shadow-slate-100/50 shrink-0 h-screen overflow-y-auto animate-fade-in">
+        <div className="p-5 md:p-6 flex flex-col h-full min-h-0 justify-between gap-6">
           <div>
             {/* Brand Header */}
             <div className="flex items-center gap-3.5 mb-8 md:mb-10 justify-between md:justify-start">
@@ -328,8 +542,13 @@ export default function Dashboard({ onSignOut }: DashboardProps) {
               </p>
             </div>
 
-            {/* Navigation options */}
-            <div className="space-y-1.5">
+            {/* Tasks Module Group Header */}
+            <div className="px-4.5 mb-2 mt-2 flex items-center justify-between animate-fade-in">
+              <p className="text-[10px] font-black text-indigo-400/80 tracking-widest uppercase">
+                Tasks Module
+              </p>
+            </div>
+            <div className="space-y-1.5 mb-5">
               {[
                 { id: 'all', label: 'Inbox', icon: <Inbox className="h-5 w-5" />, count: pendingTasksCount },
                 { id: 'today', label: 'Today', icon: <Calendar className="h-5 w-5" />, count: tasks.filter(t => t.dueDate === todayStr && t.status === 'pending').length },
@@ -346,7 +565,7 @@ export default function Dashboard({ onSignOut }: DashboardProps) {
                       // Clear general category filter to display correctly
                       setSelectedCategory('All');
                     }}
-                    className={`w-full flex items-center gap-4 px-4.5 py-3 rounded-2xl font-bold text-sm transition-all focus:outline-none ${
+                    className={`w-full flex items-center gap-4 px-4.5 py-2.5 rounded-2xl font-bold text-sm transition-all focus:outline-none ${
                       isActive 
                         ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-150 scale-102 font-extrabold' 
                         : 'text-indigo-400/90 hover:bg-indigo-50/60 hover:text-indigo-750'
@@ -355,6 +574,47 @@ export default function Dashboard({ onSignOut }: DashboardProps) {
                     <span>{item.icon}</span>
                     <span>{item.label}</span>
                     {item.count !== null && (
+                      <span className={`ml-auto text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                        isActive ? 'bg-indigo-400 text-white' : 'bg-indigo-50 text-indigo-600'
+                      }`}>
+                        {item.count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Records Module Group Header */}
+            <div className="px-4.5 mb-2 mt-4 flex items-center justify-between">
+              <p className="text-[10px] font-black text-indigo-400/80 tracking-widest uppercase">
+                Records &amp; Trackers
+              </p>
+            </div>
+            <div className="space-y-1.5 mb-2">
+              {[
+                { id: 'progress', label: 'Habits Matrix', icon: <Activity className="h-5 w-5" />, count: tasks.filter(t => t.isRecurring).length },
+                { id: 'records', label: 'Smart Trackers', icon: <ClipboardList className="h-5 w-5" />, count: null },
+                { id: 'finance', label: 'Finance Tracker', icon: <PiggyBank className="h-5 w-5" />, count: null }
+              ].map((item) => {
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setActiveTab(item.id as any);
+                      // Clear general category filter to display correctly
+                      setSelectedCategory('All');
+                    }}
+                    className={`w-full flex items-center gap-4 px-4.5 py-2.5 rounded-2xl font-bold text-sm transition-all focus:outline-none ${
+                      isActive 
+                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-150 scale-102 font-extrabold' 
+                        : 'text-indigo-400/90 hover:bg-indigo-50/60 hover:text-indigo-750'
+                    }`}
+                  >
+                    <span>{item.icon}</span>
+                    <span>{item.label}</span>
+                    {item.count !== null && item.count > 0 && (
                       <span className={`ml-auto text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
                         isActive ? 'bg-indigo-400 text-white' : 'bg-indigo-50 text-indigo-600'
                       }`}>
@@ -378,7 +638,7 @@ export default function Dashboard({ onSignOut }: DashboardProps) {
                   className={`flex items-center gap-3 px-4.5 py-2.5 rounded-xl font-semibold text-xs cursor-pointer transition ${
                     selectedCategory === 'All' 
                       ? 'bg-indigo-50 text-indigo-850 font-bold' 
-                      : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-50'
+                      : 'text-slate-600 hover:text-indigo-650 hover:bg-slate-50'
                   }`}
                 >
                   <div className="w-2.5 h-2.5 rounded-full bg-indigo-600"></div>
@@ -438,17 +698,26 @@ export default function Dashboard({ onSignOut }: DashboardProps) {
       </nav>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col h-full min-w-0">
+      <main className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
         
         {/* Main Content Header */}
-        <header className="h-auto md:h-24 px-6 md:px-10 py-5 md:py-0 flex flex-col md:flex-row md:items-center justify-between border-b border-indigo-50/50 bg-white/45 backdrop-blur-md">
-          <div className="mb-4 md:mb-0">
-            <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight font-display">
-              Good day, {user?.displayName?.split(' ')[0] || 'User Profile'}!
-            </h2>
-            <p className="text-slate-500 font-medium text-sm mt-0.5">
-              You have <span className="text-indigo-600 font-bold">{pendingTasksCount} tasks</span> pending in your manager schema.
-            </p>
+        <header className="h-auto md:h-20 px-5 md:px-8 py-4 md:py-0 flex flex-col md:flex-row md:items-center justify-between border-b border-indigo-50/50 bg-white/45 backdrop-blur-md shrink-0">
+          <div className="mb-4 md:mb-0 flex items-center gap-3">
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="md:hidden p-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-750 border border-indigo-100 transition shrink-0"
+              aria-label="Toggle Navigation"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <div>
+              <h2 className="text-xl md:text-3xl font-black text-slate-900 tracking-tight font-display leading-tight">
+                Good day, {user?.displayName?.split(' ')[0] || 'User Profile'}!
+              </h2>
+              <p className="text-slate-500 font-medium text-xs md:text-sm mt-0.5">
+                You have <span className="text-indigo-600 font-bold">{pendingTasksCount} tasks</span> pending in your manager schema.
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-4 justify-between md:justify-end">
@@ -487,7 +756,7 @@ export default function Dashboard({ onSignOut }: DashboardProps) {
         </header>
 
         {/* Content Container Body */}
-        <div className="flex-1 p-6 md:p-10 overflow-y-auto">
+        <div className="flex-1 p-4 md:p-6 md:p-8 overflow-y-auto w-full max-w-full">
           
           {/* Modal Overlay Components */}
           {isFeedbackOpen && (
@@ -515,14 +784,38 @@ export default function Dashboard({ onSignOut }: DashboardProps) {
             >
               <Analytics tasks={tasks} />
             </motion.div>
+          ) : activeTab === 'progress' ? (
+            <motion.div 
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-6"
+            >
+              <ProgressMatrix tasks={tasks} onEditTask={(t) => { setEditingTask(t); setIsFormOpen(true); }} />
+            </motion.div>
+          ) : activeTab === 'records' ? (
+            <motion.div 
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-6"
+            >
+              <RecordsModule />
+            </motion.div>
+          ) : activeTab === 'finance' ? (
+            <motion.div 
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-6"
+            >
+              <FinanceTracker />
+            </motion.div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 md:gap-6 items-start">
               
               {/* Left Column: Task Creator & List Sheet (Col span 8) */}
-              <div className="col-span-1 lg:col-span-8 flex flex-col gap-6">
+              <div className="col-span-1 lg:col-span-8 flex flex-col gap-4 md:gap-5">
 
                 {/* Main Task Creator Box matching the top rounded input box of Design template */}
-                <div className="bg-white rounded-[2rem] shadow-md border border-indigo-50/60 p-6 md:p-8">
+                <div className="bg-white rounded-3xl shadow-sm border border-indigo-50/60 p-5 md:p-6">
                   <div className="flex flex-col sm:flex-row gap-4 mb-3">
                     <input 
                       type="text" 
@@ -590,7 +883,7 @@ export default function Dashboard({ onSignOut }: DashboardProps) {
                     <p className="text-xs font-semibold text-slate-450">Synchronizing database indices...</p>
                   </div>
                 ) : filteredTasks.length === 0 ? (
-                  <div className="bg-white border border-indigo-100/50 rounded-[2rem] py-16 px-8 text-center shadow-xs">
+                  <div className="bg-white border border-indigo-100/50 rounded-3xl py-12 px-6 text-center shadow-xs">
                     <HelpCircle className="h-12 w-12 text-indigo-300 mx-auto mb-4" />
                     <h4 className="text-base font-bold text-indigo-950 font-display">No tasks matching queries</h4>
                     <p className="text-xs text-slate-450 mt-1 max-w-sm mx-auto">
@@ -727,10 +1020,10 @@ export default function Dashboard({ onSignOut }: DashboardProps) {
               </div>
 
               {/* Right Column: Up Next Banner & Activity Stats (Col span 4) */}
-              <div className="col-span-1 lg:col-span-4 flex flex-col gap-6 w-full">
+              <div className="col-span-1 lg:col-span-4 flex flex-col gap-4 md:gap-5 w-full">
                 
                 {/* Up Next Widget Card from design theme */}
-                <div className="bg-gradient-to-br from-indigo-650 to-indigo-800 rounded-[2rem] p-8 text-white shadow-xl shadow-indigo-200/40 relative overflow-hidden shrink-0">
+                <div className="bg-gradient-to-br from-indigo-650 to-indigo-800 rounded-3xl p-6 text-white shadow-lg shadow-indigo-200/40 relative overflow-hidden shrink-0">
                   <div className="relative z-10">
                     <p className="text-indigo-200 font-black text-xs uppercase tracking-widest mb-2 flex items-center gap-1">
                       <Sparkles className="h-3 w-3 text-rose-300 animate-pulse" /> UP NEXT FOR REVIEW
@@ -790,7 +1083,7 @@ export default function Dashboard({ onSignOut }: DashboardProps) {
                 </div>
 
                 {/* Live Activity Category distribution graph widget */}
-                <div className="bg-white rounded-[2rem] p-6 border border-indigo-100 shadow-sm flex flex-col justify-between">
+                <div className="bg-white rounded-3xl p-5 border border-indigo-100 shadow-sm flex flex-col justify-between">
                   <div>
                     <h4 className="font-black text-slate-800 text-sm tracking-tight mb-1 font-display">Activity Distributions</h4>
                     <p className="text-[10px] text-slate-400 mb-4 font-medium uppercase tracking-wider">Indexed sheets representation</p>

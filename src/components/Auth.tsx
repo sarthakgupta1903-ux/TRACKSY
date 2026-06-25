@@ -9,7 +9,7 @@ import {
   signInWithPopup
 } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
-import { auth, db } from '../lib/firebase';
+import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { LogIn, UserPlus, KeyRound, ArrowRight, ShieldCheck, Mail, Lock, User, RefreshCw, Sparkles } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -69,11 +69,15 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
         await updateProfile(user, { displayName: name });
 
         // Save profile in Firestore to satisfy Database Design
-        await setDoc(doc(db, 'users', user.uid), {
-          name,
-          email,
-          createdAt: new Date().toISOString()
-        });
+        try {
+          await setDoc(doc(db, 'users', user.uid), {
+            name,
+            email,
+            createdAt: new Date().toISOString()
+          });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
+        }
 
         setSuccess('Account created successfully! Redirecting...');
         setTimeout(() => {
@@ -108,11 +112,15 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
       const user = userCredential.user;
 
       // Save user profile state in Firestore database
-      await setDoc(doc(db, 'users', user.uid), {
-        name: user.displayName || 'Google User',
-        email: user.email || '',
-        createdAt: new Date().toISOString()
-      }, { merge: true });
+      try {
+        await setDoc(doc(db, 'users', user.uid), {
+          name: user.displayName || 'Google User',
+          email: user.email || '',
+          createdAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
+      }
 
       setSuccess('Successfully signed in with Google! Redirecting...');
       setTimeout(() => {
@@ -210,7 +218,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
             <Sparkles className="h-6 w-6" />
           </div>
           <h2 className="text-3xl font-black font-display tracking-tight text-indigo-950">
-            {isResetMode ? 'Account Recovery' : isLogin ? 'Welcome Back' : 'Create Account'}
+            {isResetMode ? 'Account Recovery' : isLogin ? 'Welcome' : 'Create Account'}
           </h2>
           <p className="text-xs text-indigo-600 font-bold tracking-wider uppercase mt-1">TRACKSY</p>
           <p className="text-sm text-slate-500 mt-3 max-w-sm">

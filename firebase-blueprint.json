@@ -86,9 +86,50 @@
             "type": "string"
           },
           "description": "Active days for custom day selection (e.g. ['Mon', 'Wed', 'Fri'])"
+        },
+        "marked": {
+          "type": "boolean",
+          "description": "Whether this task row is marked or unmarked"
         }
       },
       "required": ["userId", "title", "status", "createdAt", "updatedAt"]
+    },
+    "TaskOccurrence": {
+      "title": "TaskOccurrence",
+      "description": "Completion instances of recurring tasks for specific calendar dates.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "ID of user"
+        },
+        "taskId": {
+          "type": "string",
+          "description": "ID of parent recurring task"
+        },
+        "scheduledDate": {
+          "type": "string",
+          "description": "The date of the occurrence (YYYY-MM-DD)"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["completed", "missed", "pending", "skipped"],
+          "description": "Current tracking status of occurrence"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional memo updates"
+        },
+        "completedAt": {
+          "type": "string",
+          "description": "Timestamp when task occurrence completed"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": ["userId", "taskId", "scheduledDate", "status", "updatedAt"]
     },
     "Feedback": {
       "title": "Feedback",
@@ -113,6 +154,60 @@
         }
       },
       "required": ["userId", "userEmail", "message", "createdAt"]
+    },
+    "RecordTracker": {
+      "title": "RecordTracker",
+      "description": "Custom track sheet for habit, delivery, attendance, or maintenance routines.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "UID of the owner" },
+        "title": { "type": "string", "description": "Title of track sheet" },
+        "description": { "type": "string", "description": "Notes or detail guidelines" },
+        "templateType": { "type": "string", "enum": ["habit", "delivery", "attendance", "maintenance"] },
+        "unit": { "type": "string", "description": "Unit of measurement" },
+        "defaultValue": { "type": "string", "description": "Initial state value" },
+        "marked": { "type": "boolean", "description": "Prioritization status" },
+        "recurrencePerDay": { "type": "integer" },
+        "activeDays": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "title", "templateType", "unit", "defaultValue", "createdAt", "updatedAt"]
+    },
+    "RecordLog": {
+      "title": "RecordLog",
+      "description": "Logged status or entry for a RecordTracker at a specific date and slot index.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "UID of owner" },
+        "trackerId": { "type": "string", "description": "Parent tracker ID" },
+        "date": { "type": "string" },
+        "status": { "type": "string" },
+        "quantity": { "type": "number" },
+        "notes": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "slotIndex": { "type": "integer" }
+      },
+      "required": ["userId", "trackerId", "date", "status", "updatedAt"]
+    },
+    "FinancialRecord": {
+      "title": "FinancialRecord",
+      "description": "Log of earnings, expenditures, and recurring bill payments.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "UID of the owner" },
+        "title": { "type": "string", "description": "Title of transaction" },
+        "type": { "type": "string", "enum": ["earning", "expenditure"] },
+        "amount": { "type": "number", "description": "Amount in local currency" },
+        "category": { "type": "string", "enum": ["rent", "water", "electricity", "grocery", "gym", "salary", "freelance", "investment", "other"] },
+        "date": { "type": "string", "description": "Transaction date YYYY-MM-DD" },
+        "earningBasis": { "type": "string", "enum": ["daily", "monthly", "custom", "none"] },
+        "isBillPayment": { "type": "boolean" },
+        "billStatus": { "type": "string", "enum": ["paid", "pending", "none"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "title", "type", "amount", "category", "date", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -127,6 +222,22 @@
     "/feedback/{feedbackId}": {
       "schema": "Feedback",
       "description": "Feedback suggestions and issues reported by application users."
+    },
+    "/taskOccurrences/{occurrenceId}": {
+      "schema": "TaskOccurrence",
+      "description": "Daily, weekly, or monthly occurrence statuses for recurring tasks tracked in real-time."
+    },
+    "/recordTrackers/{trackerId}": {
+      "schema": "RecordTracker",
+      "description": "Track sheets configured for user records."
+    },
+    "/recordLogs/{logId}": {
+      "schema": "RecordLog",
+      "description": "Service log entries per date and recurrence slot."
+    },
+    "/financialRecords/{recordId}": {
+      "schema": "FinancialRecord",
+      "description": "Earning, expenditure, and bills tracking documents."
     }
   }
 }

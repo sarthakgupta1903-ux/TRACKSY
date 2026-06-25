@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Task, TaskCategory, TaskPriority, RepeatPattern } from '../types';
 import { X, Calendar, AlertTriangle, Tag, Clock, Repeat, AlignLeft, Check } from 'lucide-react';
 import { motion } from 'motion/react';
+import { getLocalDateString } from '../lib/firebase';
 
 interface TaskFormProps {
   task?: Task | null; // If editing
@@ -40,6 +41,7 @@ export default function TaskForm({ task, onClose, onSubmit }: TaskFormProps) {
   const [isRecurring, setIsRecurring] = useState(false);
   const [repeatPattern, setRepeatPattern] = useState<RepeatPattern>('none');
   const [customActiveDays, setCustomActiveDays] = useState<string[]>([]);
+  const [marked, setMarked] = useState(false);
   const [error, setError] = useState('');
 
   // Hydrate fields if editing
@@ -55,11 +57,13 @@ export default function TaskForm({ task, onClose, onSubmit }: TaskFormProps) {
       setIsRecurring(task.isRecurring || false);
       setRepeatPattern(task.repeatPattern || 'none');
       setCustomActiveDays(task.customActiveDays || []);
+      setMarked(task.marked || false);
     } else {
       // Defaults
-      const todayString = new Date().toISOString().split('T')[0];
+      const todayString = getLocalDateString();
       setStartDate(todayString);
       setDueDate(todayString);
+      setMarked(false);
     }
   }, [task]);
 
@@ -86,7 +90,8 @@ export default function TaskForm({ task, onClose, onSubmit }: TaskFormProps) {
       reminderTime,
       isRecurring,
       repeatPattern: isRecurring ? repeatPattern : 'none',
-      customActiveDays: (isRecurring && repeatPattern === 'custom') ? customActiveDays : []
+      customActiveDays: (isRecurring && repeatPattern === 'custom') ? customActiveDays : [],
+      marked
     });
   };
 
@@ -97,10 +102,10 @@ export default function TaskForm({ task, onClose, onSubmit }: TaskFormProps) {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 15 }}
         transition={{ duration: 0.3, cubicBezier: [0.16, 1, 0.3, 1] }}
-        className="relative bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-100 overflow-hidden"
+        className="relative bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[85vh]"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 bg-slate-50 border-b border-slate-100">
+        <div className="flex items-center justify-between px-6 py-4 bg-slate-50 border-b border-slate-100 shrink-0">
           <h3 className="text-lg font-display font-semibold text-slate-950">
             {task ? 'Modify Task Details' : 'Design Private Task'}
           </h3>
@@ -113,7 +118,7 @@ export default function TaskForm({ task, onClose, onSubmit }: TaskFormProps) {
         </div>
 
         {/* Content Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5 flex-1 overflow-y-auto pr-3 mr-1 scrollbar-thin scrollbar-thumb-indigo-200 scrollbar-track-transparent">
           {error && (
             <div className="bg-rose-50 text-rose-600 text-xs py-2.5 px-4 rounded-xl border border-rose-100 font-medium">
               {error}
@@ -251,6 +256,25 @@ export default function TaskForm({ task, onClose, onSubmit }: TaskFormProps) {
             />
             <p className="text-[10px] text-slate-450 italic">
               Sends local visual notification alert at specified system hour.
+            </p>
+          </div>
+
+          {/* Mark Row as Priority */}
+          <div className="bg-slate-50 p-4 border border-slate-200/60 rounded-xl">
+            <label className="flex items-center justify-between cursor-pointer">
+              <div className="flex items-center gap-2">
+                <span className="text-amber-550 text-base">★</span>
+                <span className="text-xs font-bold text-slate-800 font-display">Mark as Priority Habit Row</span>
+              </div>
+              <input
+                type="checkbox"
+                checked={marked}
+                onChange={(e) => setMarked(e.target.checked)}
+                className="rounded text-amber-500 focus:ring-amber-200 h-4 w-4"
+              />
+            </label>
+            <p className="text-[10px] text-slate-450 italic mt-1 pl-6">
+              Highlights this row on the dashboard and lets you filter for quick monitoring.
             </p>
           </div>
 
